@@ -8,10 +8,10 @@ from selenium.webdriver.common.keys import Keys
 from selenium.webdriver.support.ui import WebDriverWait
 from selenium.webdriver.support import expected_conditions as EC
 from selenium.webdriver.chrome.service import Service
-from webdriver_manager.chrome import ChromeDriverManager
 import base64
 from PIL import Image
 import io
+import subprocess
 
 # Page configuration
 st.set_page_config(
@@ -133,32 +133,92 @@ class ColorDotsApp:
     def create_driver(self):
         """Create Chrome driver with appropriate settings"""
         options = webdriver.ChromeOptions()
-        options.add_argument('--headless')
+        options.add_argument('--headless=new')  # Use new headless mode
         options.add_argument('--no-sandbox')
         options.add_argument('--disable-dev-shm-usage')
         options.add_argument('--disable-gpu')
-        options.add_argument('--disable-features=dbus')
+        options.add_argument('--disable-features=VizDisplayCompositor')
         options.add_argument('--disable-software-rasterizer')
 
-        # Try different driver configurations
+        # Additional stability options
+        options.add_argument('--disable-blink-features=AutomationControlled')
+        options.add_experimental_option("excludeSwitches", ["enable-automation"])
+        options.add_experimental_option('useAutomationExtension', False)
+
+        # Memory optimization
+        options.add_argument('--memory-pressure-off')
+        options.add_argument('--max_old_space_size=4096')
+
         try:
-            # For Streamlit Cloud
-            options.binary_location = '/usr/bin/chromium'
-            driver = webdriver.Chrome(
-                executable_path='/usr/bin/chromedriver',
-                options=options
-            )
-            return driver
-        except:
-            try:
-                # For local development with webdriver-manager
-                service = Service(ChromeDriverManager().install())
+            # Check for Chrome/Chromium binaries
+            chrome_paths = [
+                '/usr/bin/chromium',
+                '/usr/bin/chromium-browser',
+                '/usr/bin/google-chrome',
+                '/usr/local/bin/chromium',
+                '/usr/local/bin/google-chrome'
+            ]
+
+            chrome_binary = None
+            for path in chrome_paths:
+                if os.path.exists(path):
+                    chrome_binary = path
+                    break
+
+            if chrome_binary:
+                options.binary_location = chrome_binary
+
+            # Check for ChromeDriver
+            chromedriver_paths = [
+                '/usr/bin/chromedriver',
+                '/usr/local/bin/chromedriver',
+                '/opt/chromedriver/chromedriver'
+            ]
+
+            chromedriver_path = None
+            for path in chromedriver_paths:
+                if os.path.exists(path):
+                    chromedriver_path = path
+                    break
+
+            # Try to initialize driver
+            if chromedriver_path:
+                service = Service(executable_path=chromedriver_path)
                 driver = webdriver.Chrome(service=service, options=options)
-                return driver
-            except Exception as e:
-                st.error(f"Failed to initialize Chrome driver: {str(e)}")
-                st.info("Make sure Chrome/Chromium is installed on your system.")
-                raise
+            else:
+                # Let Selenium find ChromeDriver in PATH
+                driver = webdriver.Chrome(options=options)
+
+            return driver
+
+        except Exception as e:
+            st.error(f"Failed to initialize Chrome driver: {str(e)}")
+
+            # Debug information
+            st.info("Debug Information:")
+
+            # Check Chrome installation
+            chrome_check = subprocess.run(['which', 'chromium'], capture_output=True, text=True)
+            st.code(f"Chromium location: {chrome_check.stdout.strip() or 'Not found'}")
+
+            # Check ChromeDriver installation
+            driver_check = subprocess.run(['which', 'chromedriver'], capture_output=True, text=True)
+            st.code(f"ChromeDriver location: {driver_check.stdout.strip() or 'Not found'}")
+
+            # Check versions
+            try:
+                chrome_version = subprocess.run(['chromium', '--version'], capture_output=True, text=True)
+                st.code(f"Chromium version: {chrome_version.stdout.strip()}")
+            except:
+                st.code("Could not get Chromium version")
+
+            try:
+                driver_version = subprocess.run(['chromedriver', '--version'], capture_output=True, text=True)
+                st.code(f"ChromeDriver version: {driver_version.stdout.strip()}")
+            except:
+                st.code("Could not get ChromeDriver version")
+
+            raise
 
     def search_google_images(self, query, num_images=100):
         """Perform Google image search and return thumbnail URLs"""
