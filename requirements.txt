@@ -1,6 +1,5 @@
-chromium
-chromium-driver
-libglib2.0-0
-libnss3
-libgconf-2-4
-libfontconfig1
+streamlit==1.29.0
+selenium==4.15.2
+requests==2.31.0
+webdriver-manager==4.0.1
+Pillow==10.1.0

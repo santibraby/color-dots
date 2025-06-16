@@ -1,18 +1,57 @@
-# 🚀 Deployment Guide for Streamlit Cloud
+# Color Dots 🎨
 
-This guide will help you deploy the Color Dots app to Streamlit Cloud for free hosting.
+A beautiful Streamlit app that searches Google Images and displays results in a 10×10 circular grid.
 
-## Prerequisites
+[![Streamlit App](https://static.streamlit.io/badges/streamlit_badge_black_white.svg)](https://share.streamlit.io)
 
-- GitHub account
-- Streamlit Cloud account (free)
-- Your code pushed to a public GitHub repository
+## Features
 
-## Step-by-Step Deployment
+- 🔍 Google image search using Selenium
+- ⭕ 10×10 grid of circular thumbnails
+- 🎨 Clean, minimal interface with Karla font
+- 💫 Smooth hover animations
+- 📱 Responsive design
 
-### 1. Prepare Your Repository
+## Demo
 
-Ensure your GitHub repository has these files:
+Try it live: [color-dots.streamlit.app](https://share.streamlit.io) *(Update with your URL after deployment)*
+
+## Local Installation
+
+1. Clone the repository:
+```bash
+git clone https://github.com/YOUR_USERNAME/color-dots.git
+cd color-dots
+```
+
+2. Create virtual environment:
+```bash
+python -m venv venv
+source venv/bin/activate  # On Windows: venv\Scripts\activate
+```
+
+3. Install dependencies:
+```bash
+pip install -r requirements.txt
+```
+
+4. Run the app:
+```bash
+streamlit run streamlit_app.py
+```
+
+## Deployment on Streamlit Cloud
+
+1. Push this repository to GitHub (must be public)
+2. Go to [share.streamlit.io](https://share.streamlit.io)
+3. Connect your GitHub account
+4. Deploy with these settings:
+   - Repository: `YOUR_USERNAME/color-dots`
+   - Branch: `main`
+   - Main file: `streamlit_app.py`
+
+## Project Structure
+
 ```
 color-dots/
 ├── streamlit_app.py      # Main application
@@ -20,113 +59,54 @@ color-dots/
 ├── packages.txt         # System dependencies (Chrome)
 ├── .streamlit/
 │   └── config.toml      # Streamlit configuration
-├── README.md
-├── LICENSE
-└── .gitignore
-```
-
-### 2. Sign Up for Streamlit Cloud
-
-1. Go to [share.streamlit.io](https://share.streamlit.io)
-2. Click "Sign up with GitHub"
-3. Authorize Streamlit to access your GitHub account
-
-### 3. Deploy Your App
-
-1. Click "New app" on your Streamlit Cloud dashboard
-2. Fill in the deployment form:
-   - **Repository:** `YOUR_GITHUB_USERNAME/color-dots`
-   - **Branch:** `main`
-   - **Main file path:** `streamlit_app.py`
-3. Click "Deploy!"
-
-### 4. Monitor Deployment
-
-- Watch the deployment logs in real-time
-- First deployment may take 5-10 minutes
-- Subsequent updates are faster
-
-### 5. Your App URL
-
-Once deployed, your app will be available at:
-```
-https://YOUR_APP_NAME.streamlit.app
+├── README.md            # This file
+├── LICENSE              # MIT license
+└── .gitignore           # Git ignore file
 ```
 
 ## Important Notes
 
-### System Dependencies
+- `packages.txt` is required for Streamlit Cloud to install Chrome
+- Repository must be public for free hosting
+- First deployment may take 5-10 minutes
 
-The `packages.txt` file is **crucial** for Streamlit Cloud. It installs:
-- `chromium` - The Chrome browser
-- `chromium-driver` - WebDriver for Selenium
+## Usage
 
-Without this file, Selenium won't work on Streamlit Cloud!
+1. Enter a search term in the sidebar
+2. Click "Search"
+3. View your results in the circular grid
+4. Hover over images to see them enlarge
 
-### Environment Detection
+## Technologies
 
-The app automatically detects if it's running on Streamlit Cloud:
-```python
-if 'STREAMLIT_SHARING_MODE' in os.environ:
-    # Streamlit Cloud settings
-else:
-    # Local development settings
-```
-
-### Resource Limits
-
-Streamlit Cloud free tier has limits:
-- 1 GB of RAM
-- 1 CPU
-- 800 MB of storage
-
-The app is optimized to work within these limits.
+- **Streamlit** - Web app framework
+- **Selenium** - Web automation for Google Images
+- **Pillow** - Image processing
+- **Chrome/Chromium** - Browser engine
 
 ## Troubleshooting
 
-### "ChromeDriver not found" Error
+### Chrome Driver Issues
 - Ensure `packages.txt` exists with chromium packages
-- Check that Chrome binary location is set correctly
+- Check deployment logs on Streamlit Cloud
 
-### Slow Performance
-- First search may be slower due to Chrome startup
-- Consider reducing max images from 100 to 50
+### No Images Found
+- Try different search terms
+- Check internet connectivity
+- Google may have updated their HTML structure
 
-### App Won't Deploy
-- Check logs for specific errors
-- Ensure repository is public
-- Verify all required files are present
+## License
 
-## Updating Your App
+MIT License - see LICENSE file for details
 
-To update your deployed app:
-1. Make changes locally
-2. Commit and push to GitHub
-3. Streamlit Cloud automatically redeploys
+## Contributing
 
-```bash
-git add .
-git commit -m "Update: description of changes"
-git push origin main
-```
+Pull requests are welcome! For major changes, please open an issue first.
 
-## Advanced Settings
+## Author
 
-In Streamlit Cloud dashboard, you can:
-- Set custom subdomain
-- Configure secrets (not needed for this app)
-- View analytics
-- Manage app settings
+Your Name - [@yourusername](https://github.com/yourusername)
 
-## Local Testing
+---
 
-Always test locally before deploying:
-```bash
-streamlit run streamlit_app.py
-```
-
-## Support
-
-- [Streamlit Documentation](https://docs.streamlit.io)
-- [Streamlit Community Forum](https://discuss.streamlit.io)
-- [GitHub Issues](https://github.com/YOUR_USERNAME/color-dots/issues)
+Made with ❤️ using Streamlit

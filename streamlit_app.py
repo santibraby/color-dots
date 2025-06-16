@@ -1,24 +1,19 @@
-#!/usr/bin/env python3
-"""
-Color Dots Streamlit App - Google Image Search with Circular Grid Display
-"""
-
+import streamlit as st
 import os
 import time
 import requests
-import streamlit as st
 from selenium import webdriver
 from selenium.webdriver.common.by import By
 from selenium.webdriver.common.keys import Keys
 from selenium.webdriver.support.ui import WebDriverWait
 from selenium.webdriver.support import expected_conditions as EC
+from selenium.webdriver.chrome.service import Service
+from webdriver_manager.chrome import ChromeDriverManager
 import base64
 from PIL import Image
 import io
-from selenium.webdriver.chrome.service import Service
-from webdriver_manager.chrome import ChromeDriverManager
 
-# Page config
+# Page configuration
 st.set_page_config(
     page_title="Color Dots",
     page_icon="🎨",
@@ -26,38 +21,34 @@ st.set_page_config(
     initial_sidebar_state="expanded"
 )
 
-# Custom CSS
+# Custom CSS for styling
 st.markdown("""
 <style>
     @import url('https://fonts.googleapis.com/css2?family=Karla:wght@400;700&display=swap');
-    
+
     /* Global styles */
     .stApp {
-        background-color: white;
+        background-color: #ffffff;
     }
-    
+
     * {
         font-family: 'Karla', sans-serif !important;
+    }
+
+    /* Dark grey text */
+    h1, h2, h3, p, div {
         color: #2a2a2a !important;
     }
-    
-    /* Sidebar styling */
-    .css-1d391kg {
+
+    /* Sidebar */
+    section[data-testid="stSidebar"] {
         background-color: #f8f8f8;
     }
-    
-    /* Hide Streamlit branding */
+
+    /* Hide Streamlit elements */
     #MainMenu {visibility: hidden;}
     footer {visibility: hidden;}
-    header {visibility: hidden;}
-    
-    /* Title styling */
-    h1 {
-        color: #1a1a1a !important;
-        font-weight: 700 !important;
-        letter-spacing: -0.5px;
-    }
-    
+
     /* Button styling */
     .stButton > button {
         background-color: #2a2a2a;
@@ -67,43 +58,33 @@ st.markdown("""
         font-weight: 600;
         border-radius: 8px;
         transition: all 0.3s ease;
+        width: 100%;
     }
-    
+
     .stButton > button:hover {
         background-color: #1a1a1a;
         transform: translateY(-2px);
     }
-    
-    /* Input field styling */
+
+    /* Input styling */
     .stTextInput > div > div > input {
         border: 2px solid #e0e0e0;
         border-radius: 8px;
         padding: 0.5rem;
-        font-size: 16px;
     }
-    
-    .stTextInput > div > div > input:focus {
-        border-color: #2a2a2a;
-        box-shadow: 0 0 0 1px #2a2a2a;
-    }
-    
-    /* Progress bar */
-    .stProgress > div > div > div > div {
-        background-color: #2a2a2a;
-    }
-    
-    /* Image grid container */
+
+    /* Image grid */
     .image-grid {
         display: grid;
         grid-template-columns: repeat(10, 1fr);
         gap: 12px;
         padding: 20px;
-        max-width: 1200px;
+        max-width: 1000px;
         margin: 0 auto;
     }
-    
-    /* Circular image styling */
-    .image-container {
+
+    /* Circle images */
+    .circle-image {
         position: relative;
         width: 100%;
         padding-bottom: 100%;
@@ -111,272 +92,267 @@ st.markdown("""
         border-radius: 50%;
         background-color: #f0f0f0;
         box-shadow: 0 2px 8px rgba(0,0,0,0.1);
-        transition: transform 0.3s ease, box-shadow 0.3s ease;
+        transition: transform 0.3s ease;
     }
-    
-    .image-container:hover {
+
+    .circle-image:hover {
         transform: scale(1.05);
-        box-shadow: 0 4px 16px rgba(0,0,0,0.15);
+        box-shadow: 0 4px 16px rgba(0,0,0,0.2);
     }
-    
-    .image-container img {
+
+    .circle-image img {
         position: absolute;
-        top: 50%;
-        left: 50%;
-        transform: translate(-50%, -50%);
+        top: 0;
+        left: 0;
         width: 100%;
         height: 100%;
         object-fit: cover;
     }
-    
-    /* Loading animation */
-    .loading-text {
-        color: #666 !important;
-        font-size: 14px;
+
+    /* Loading text */
+    .status-text {
         text-align: center;
+        color: #666;
         padding: 20px;
     }
 </style>
 """, unsafe_allow_html=True)
 
-class ColorDotsStreamlit:
+
+class ColorDotsApp:
     def __init__(self):
-        self.thumbnails = []
-        
-    def setup_driver(self):
-        """Setup Chrome driver with appropriate options"""
+        self.setup_session_state()
+
+    def setup_session_state(self):
+        """Initialize session state variables"""
+        if 'images' not in st.session_state:
+            st.session_state.images = []
+        if 'last_search' not in st.session_state:
+            st.session_state.last_search = ""
+
+    def create_driver(self):
+        """Create Chrome driver with appropriate settings"""
         options = webdriver.ChromeOptions()
         options.add_argument('--headless')
         options.add_argument('--no-sandbox')
         options.add_argument('--disable-dev-shm-usage')
         options.add_argument('--disable-gpu')
         options.add_argument('--disable-features=dbus')
-        options.add_argument('--disable-blink-features=AutomationControlled')
-        options.add_experimental_option("excludeSwitches", ["enable-automation"])
-        options.add_experimental_option('useAutomationExtension', False)
-        
-        # For Streamlit Cloud deployment
-        if 'STREAMLIT_SHARING_MODE' in os.environ:
-            options.binary_location = '/usr/bin/chromium'
-            return webdriver.Chrome(options=options)
-        else:
-            # Local development - use webdriver-manager
-            service = Service(ChromeDriverManager().install())
-            return webdriver.Chrome(service=service, options=options)
-    
-    def search_images(self, query, max_images=100, progress_callback=None):
-        """Perform Google image search and collect thumbnail URLs"""
-        driver = self.setup_driver()
-        self.thumbnails = []
-        
+        options.add_argument('--disable-software-rasterizer')
+
+        # Try different driver configurations
         try:
+            # For Streamlit Cloud
+            options.binary_location = '/usr/bin/chromium'
+            driver = webdriver.Chrome(
+                executable_path='/usr/bin/chromedriver',
+                options=options
+            )
+            return driver
+        except:
+            try:
+                # For local development with webdriver-manager
+                service = Service(ChromeDriverManager().install())
+                driver = webdriver.Chrome(service=service, options=options)
+                return driver
+            except Exception as e:
+                st.error(f"Failed to initialize Chrome driver: {str(e)}")
+                st.info("Make sure Chrome/Chromium is installed on your system.")
+                raise
+
+    def search_google_images(self, query, num_images=100):
+        """Perform Google image search and return thumbnail URLs"""
+        driver = None
+        thumbnails = []
+
+        try:
+            driver = self.create_driver()
+
             # Navigate to Google Images
             driver.get("https://www.google.com/imghp")
-            
-            # Find search box and enter query
+
+            # Search for query
             search_box = WebDriverWait(driver, 10).until(
                 EC.presence_of_element_located((By.NAME, "q"))
             )
             search_box.send_keys(query)
             search_box.send_keys(Keys.RETURN)
-            
-            # Wait for images to load
+
+            # Wait for results
             time.sleep(2)
-            
-            # Scroll to load more images
+
+            # Collect thumbnails
+            collected = 0
             last_height = driver.execute_script("return document.body.scrollHeight")
-            images_collected = 0
-            
-            while images_collected < max_images:
-                # Get all image elements
+
+            while collected < num_images:
+                # Find all thumbnail images
                 images = driver.find_elements(By.CSS_SELECTOR, "img.YQ4gaf")
-                
-                for img in images[images_collected:]:
-                    if images_collected >= max_images:
+
+                for img in images[collected:]:
+                    if collected >= num_images:
                         break
-                        
+
                     try:
-                        # Get thumbnail URL
                         src = img.get_attribute("src")
                         if src and (src.startswith("http") or src.startswith("data:")):
-                            self.thumbnails.append(src)
-                            images_collected += 1
-                            
-                            # Update progress
-                            if progress_callback:
-                                progress_callback(images_collected / max_images)
+                            thumbnails.append(src)
+                            collected += 1
                     except:
                         continue
-                
-                # Scroll down
+
+                # Scroll down to load more
                 driver.execute_script("window.scrollTo(0, document.body.scrollHeight);")
                 time.sleep(1)
-                
-                # Check if we've reached the bottom
+
+                # Check if reached bottom
                 new_height = driver.execute_script("return document.body.scrollHeight")
                 if new_height == last_height:
-                    # Try to click "Show more results" button if available
-                    try:
-                        show_more = driver.find_element(By.CSS_SELECTOR, "input.mye4qd")
-                        show_more.click()
-                        time.sleep(2)
-                    except:
-                        break
+                    break
                 last_height = new_height
-                
+
         finally:
-            driver.quit()
-            
-        return self.thumbnails[:max_images]
-    
-    def get_image_from_url(self, url):
-        """Convert URL or base64 string to PIL Image"""
+            if driver:
+                driver.quit()
+
+        return thumbnails[:num_images]
+
+    def url_to_image(self, url):
+        """Convert URL or base64 to PIL Image"""
         try:
             if url.startswith("data:"):
-                # Handle base64 encoded images
+                # Handle base64
                 header, data = url.split(",", 1)
-                image_data = base64.b64decode(data)
-                return Image.open(io.BytesIO(image_data))
+                img_data = base64.b64decode(data)
+                return Image.open(io.BytesIO(img_data))
             else:
-                # Download from URL
+                # Handle URL
                 response = requests.get(url, timeout=5)
                 return Image.open(io.BytesIO(response.content))
         except:
-            # Return a placeholder image
-            img = Image.new('RGB', (100, 100), color='#f0f0f0')
-            return img
+            # Return placeholder
+            return Image.new('RGB', (100, 100), color='#e0e0e0')
 
-# Initialize session state
-if 'search_results' not in st.session_state:
-    st.session_state.search_results = []
-if 'last_query' not in st.session_state:
-    st.session_state.last_query = ""
+    def create_image_grid(self, images):
+        """Create HTML grid of circular images"""
+        html = '<div class="image-grid">'
 
-# Sidebar
-with st.sidebar:
-    st.markdown("# 🎨 Color Dots")
-    st.markdown("---")
-    
-    # Search input
-    query = st.text_input(
-        "Search for images",
-        placeholder="Enter your search query...",
-        help="Type anything you want to search for on Google Images"
-    )
-    
-    # Search button
-    search_button = st.button("Search", type="primary", use_container_width=True)
-    
-    # Info section
-    st.markdown("---")
-    st.markdown("""
-    ### How it works
-    1. Enter a search term
-    2. Click **Search**
-    3. View your results in a beautiful circular grid
-    
-    The app will fetch the first 100 images from Google Images and display them as color dots.
-    """)
-    
-    # Stats
-    if st.session_state.search_results:
-        st.markdown("---")
-        st.metric("Images found", len(st.session_state.search_results))
-        st.caption(f"Query: {st.session_state.last_query}")
-
-# Main content area
-main_container = st.container()
-
-with main_container:
-    if search_button and query:
-        # Clear previous results
-        st.session_state.search_results = []
-        st.session_state.last_query = query
-        
-        # Create progress indicators
-        progress_bar = st.progress(0)
-        status_text = st.empty()
-        
-        # Create ColorDots instance
-        color_dots = ColorDotsStreamlit()
-        
-        # Search for images
-        status_text.markdown('<p class="loading-text">🔍 Searching for images...</p>', unsafe_allow_html=True)
-        
-        def update_progress(value):
-            progress_bar.progress(value)
-            status_text.markdown(f'<p class="loading-text">📸 Collecting images: {int(value * 100)}%</p>', unsafe_allow_html=True)
-        
-        try:
-            thumbnails = color_dots.search_images(query, max_images=100, progress_callback=update_progress)
-            
-            if thumbnails:
-                status_text.markdown('<p class="loading-text">🎨 Processing images...</p>', unsafe_allow_html=True)
-                
-                # Convert URLs to images
-                images = []
-                for i, url in enumerate(thumbnails):
-                    img = color_dots.get_image_from_url(url)
-                    images.append(img)
-                    progress_bar.progress((i + 1) / len(thumbnails))
-                
-                st.session_state.search_results = images
-                
-                # Clear progress indicators
-                progress_bar.empty()
-                status_text.empty()
-                
-                # Success message
-                st.success(f"Found {len(images)} images for '{query}'!")
-                
-            else:
-                st.error("No images found. Please try a different search term.")
-                progress_bar.empty()
-                status_text.empty()
-                
-        except Exception as e:
-            st.error(f"An error occurred: {str(e)}")
-            progress_bar.empty()
-            status_text.empty()
-    
-    # Display results
-    if st.session_state.search_results:
-        st.markdown("---")
-        
-        # Create HTML for grid
-        grid_html = '<div class="image-grid">'
-        
-        for i, img in enumerate(st.session_state.search_results[:100]):
-            # Convert PIL image to base64
+        # Add images
+        for i, img in enumerate(images[:100]):
+            # Convert to base64 for embedding
             buffered = io.BytesIO()
-            img.save(buffered, format="JPEG")
+            img.save(buffered, format="JPEG", quality=85)
             img_str = base64.b64encode(buffered.getvalue()).decode()
-            
-            grid_html += f'''
-            <div class="image-container">
-                <img src="data:image/jpeg;base64,{img_str}" alt="Image {i+1}">
+
+            html += f'''
+            <div class="circle-image">
+                <img src="data:image/jpeg;base64,{img_str}" alt="Result {i + 1}">
             </div>
             '''
-        
-        # Fill remaining spots with placeholders if less than 100
-        for i in range(len(st.session_state.search_results), 100):
-            grid_html += '''
-            <div class="image-container" style="background-color: #f5f5f5;">
+
+        # Fill empty spots
+        for i in range(len(images), 100):
+            html += '<div class="circle-image"></div>'
+
+        html += '</div>'
+        return html
+
+    def run(self):
+        """Main app logic"""
+        # Sidebar
+        with st.sidebar:
+            st.title("🎨 Color Dots")
+            st.markdown("---")
+
+            # Search input
+            search_query = st.text_input(
+                "Search for images",
+                placeholder="Enter a word or phrase...",
+                help="This will search Google Images"
+            )
+
+            # Search button
+            search_clicked = st.button("Search", type="primary")
+
+            # Info
+            st.markdown("---")
+            st.markdown("""
+            ### How it works
+            1. Enter a search term
+            2. Click Search
+            3. View results in a 10×10 grid
+
+            Each image is displayed as a circle with hover effects.
+            """)
+
+            # Stats
+            if st.session_state.images:
+                st.markdown("---")
+                st.metric("Images found", len(st.session_state.images))
+                st.caption(f"Last search: {st.session_state.last_search}")
+
+        # Main area
+        if search_clicked and search_query:
+            st.session_state.images = []
+            st.session_state.last_search = search_query
+
+            # Progress indicators
+            progress = st.progress(0)
+            status = st.empty()
+
+            try:
+                # Search images
+                status.markdown('<p class="status-text">🔍 Searching Google Images...</p>',
+                                unsafe_allow_html=True)
+
+                thumbnails = self.search_google_images(search_query)
+
+                if thumbnails:
+                    # Process images
+                    status.markdown('<p class="status-text">🎨 Processing images...</p>',
+                                    unsafe_allow_html=True)
+
+                    images = []
+                    for i, url in enumerate(thumbnails):
+                        img = self.url_to_image(url)
+                        images.append(img)
+                        progress.progress((i + 1) / len(thumbnails))
+
+                    st.session_state.images = images
+
+                    # Clear progress
+                    progress.empty()
+                    status.empty()
+
+                    st.success(f"✅ Found {len(images)} images for '{search_query}'")
+                else:
+                    st.warning("No images found. Try a different search term.")
+                    progress.empty()
+                    status.empty()
+
+            except Exception as e:
+                st.error(f"Error: {str(e)}")
+                progress.empty()
+                status.empty()
+
+        # Display results
+        if st.session_state.images:
+            st.markdown("---")
+            grid_html = self.create_image_grid(st.session_state.images)
+            st.markdown(grid_html, unsafe_allow_html=True)
+        else:
+            # Welcome message
+            st.markdown("""
+            <div style="text-align: center; padding: 60px 20px;">
+                <h1 style="font-size: 48px; margin-bottom: 20px;">Welcome to Color Dots</h1>
+                <p style="font-size: 18px; color: #666;">
+                    Search for any topic to create a beautiful circular image grid
+                </p>
             </div>
-            '''
-        
-        grid_html += '</div>'
-        
-        # Display grid
-        st.markdown(grid_html, unsafe_allow_html=True)
-        
-    else:
-        # Welcome message
-        st.markdown("""
-        <div style="text-align: center; padding: 50px; color: #666;">
-            <h1 style="font-size: 48px; margin-bottom: 20px;">Welcome to Color Dots</h1>
-            <p style="font-size: 18px; color: #888;">
-                Enter a search term in the sidebar to create your circular image grid.
-            </p>
-        </div>
-        """, unsafe_allow_html=True)
+            """, unsafe_allow_html=True)
+
+
+# Run the app
+if __name__ == "__main__":
+    app = ColorDotsApp()
+    app.run()
