@@ -31,18 +31,24 @@ st.markdown("""
         gap: 8px;
         width: 100%;
         max-width: 800px;
-        margin: 0 auto;
+        min-height: 800px;
+        margin: 20px auto;
+        padding: 20px;
+        background: rgba(255, 255, 255, 0.05);
+        border-radius: 10px;
+        border: 1px solid rgba(255, 255, 255, 0.1);
     }
 
     /* Circles */
     .circle {
         aspect-ratio: 1;
         border-radius: 50%;
-        background: #f0f0f0;
+        background: #3a3a3a;
         overflow: hidden;
         position: relative;
-        opacity: 0;
-        transition: opacity 0.3s ease;
+        opacity: 1;
+        transition: all 0.3s ease;
+        border: 1px solid rgba(255, 255, 255, 0.2);
     }
 
     .circle.loaded {
@@ -70,6 +76,22 @@ if 'images' not in st.session_state:
 API_KEY = st.secrets.get("GOOGLE_API_KEY", "")
 SEARCH_ENGINE_ID = st.secrets.get("GOOGLE_CX", "")
 
+# Check if API is configured
+if not API_KEY or not SEARCH_ENGINE_ID:
+    st.warning("""
+    ⚠️ **API credentials not configured!**
+
+    To use Google Image Search:
+    1. Create `.streamlit/secrets.toml` file
+    2. Add your credentials:
+    ```
+    GOOGLE_API_KEY = "your_api_key"
+    GOOGLE_CX = "your_search_engine_id"
+    ```
+
+    For now, you can use **Test Mode** to see the animation.
+    """)
+
 
 def search_google_images(query, num_images=100):
     """Get images from Google Custom Search API"""
@@ -89,15 +111,23 @@ def search_google_images(query, num_images=100):
 
         try:
             response = requests.get(base_url, params=params)
+            response.raise_for_status()
             data = response.json()
+
+            if "error" in data:
+                st.error(f"API Error: {data['error'].get('message', 'Unknown error')}")
+                return []
 
             if "items" in data:
                 all_images.extend(data["items"])
             else:
                 break
 
+        except requests.exceptions.RequestException as e:
+            st.error(f"Request Error: {e}")
+            break
         except Exception as e:
-            st.error(f"API Error: {e}")
+            st.error(f"Unexpected Error: {e}")
             break
 
     return all_images[:num_images]
@@ -106,18 +136,23 @@ def search_google_images(query, num_images=100):
 def load_image(url):
     """Load image from URL"""
     try:
-        response = requests.get(url, timeout=5, headers={
-            'User-Agent': 'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36'
-        })
+        headers = {
+            'User-Agent': 'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36',
+            'Accept': 'image/webp,image/apng,image/*,*/*;q=0.8'
+        }
+        response = requests.get(url, timeout=5, headers=headers)
+        response.raise_for_status()
+
         img = Image.open(io.BytesIO(response.content))
         if img.mode != 'RGB':
             img = img.convert('RGB')
         # Resize for performance
         img.thumbnail((300, 300), Image.Resampling.LANCZOS)
         return img
-    except:
+    except Exception as e:
         # Return placeholder on error
-        return Image.new('RGB', (300, 300), color='#cccccc')
+        placeholder = Image.new('RGB', (300, 300), color='#666666')
+        return placeholder
 
 
 def get_random_color(img):
@@ -161,11 +196,13 @@ def create_grid(images):
                 'base64': image_to_base64(img),
                 'color': get_random_color(img)
             })
-        except:
-            pass
+        except Exception as e:
+            st.error(f"Error processing image: {e}")
+
+    st.write(f"Processed {len(image_data)} images for grid")
 
     # Create grid HTML
-    html = '<div class="grid">'
+    html = '<div class="grid" id="imageGrid">'
     for i in range(100):
         html += f'<div class="circle" id="slot-{i}"></div>'
     html += '</div>'
@@ -173,8 +210,10 @@ def create_grid(images):
     # Add animation script
     html += f'''
     <script>
-    (function() {{
+    console.log("Starting grid animation...");
+    window.addEventListener('load', function() {{
         const images = {json.dumps(image_data)};
+        console.log("Image data loaded:", images.length);
         const slots = Array.from({{length: 100}}, (_, i) => i);
 
         // Shuffle slots for random placement
@@ -190,9 +229,11 @@ def create_grid(images):
                 const delay = index * 100; // 100ms between each
 
                 setTimeout(() => {{
-                    const slot = document.getElementById(`slot-${{slotId}}`);
+                    const slot = document.getElementById('slot-' + slotId);
+                    console.log('Loading image', index, 'into slot', slotId);
                     if (slot) {{
-                        slot.innerHTML = `<img src="data:image/jpeg;base64,${{img.base64}}" alt="">`;
+                        slot.innerHTML = '<img src="data:image/jpeg;base64,' + img.base64 + '" alt="">';
+                        slot.style.opacity = '1';
                         slot.classList.add('loaded');
 
                         // After 2 seconds, show color
@@ -200,11 +241,13 @@ def create_grid(images):
                             slot.classList.add('color-mode');
                             slot.style.backgroundColor = img.color;
                         }}, 2000);
+                    }} else {{
+                        console.error('Slot not found:', slotId);
                     }}
                 }}, delay);
             }}
         }});
-    }})();
+    }});
     </script>
     '''
 
@@ -213,6 +256,22 @@ def create_grid(images):
 
 # UI
 st.markdown("<h1 style='text-align: center; margin-bottom: 2rem;'>Color Dots</h1>", unsafe_allow_html=True)
+
+# Test mode checkbox - more prominent if API not configured
+if not API_KEY or not SEARCH_ENGINE_ID:
+    st.info("💡 API not configured - Try Test Mode below to see the animation!")
+
+test_mode = st.checkbox("🎨 Test mode (use colored placeholders)", value=(not API_KEY or not SEARCH_ENGINE_ID))
+
+if test_mode:
+    # Generate test images
+    test_images = []
+    for i in range(100):
+        color = (random.randint(50, 255), random.randint(50, 255), random.randint(50, 255))
+        img = Image.new('RGB', (100, 100), color=color)
+        test_images.append(img)
+    st.session_state.images = test_images
+    st.success("Test mode: Generated 100 colored squares")
 
 # Search controls
 col1, col2, col3 = st.columns([1, 2, 1])
@@ -228,10 +287,24 @@ with col2:
                     with st.spinner("Loading images..."):
                         # Load actual images
                         images = []
-                        for item in image_items:
-                            if url := item.get("link"):
-                                images.append(load_image(url))
+                        progress_bar = st.progress(0)
 
+                        for i, item in enumerate(image_items):
+                            # Try thumbnail first, then full image
+                            url = None
+                            if "image" in item and "thumbnailLink" in item["image"]:
+                                url = item["image"]["thumbnailLink"]
+                            elif "link" in item:
+                                url = item["link"]
+
+                            if url:
+                                img = load_image(url)
+                                images.append(img)
+
+                            # Update progress
+                            progress_bar.progress((i + 1) / len(image_items))
+
+                        progress_bar.empty()
                         st.session_state.images = images
                         st.success(f"Found {len(images)} images")
                 else:
@@ -244,11 +317,114 @@ if st.session_state.images:
     if st.button("🔄 Replay Animation"):
         st.rerun()
 
-    grid_html = create_grid(st.session_state.images)
-    st.markdown(grid_html, unsafe_allow_html=True)
+    # Debug info
+    st.write(f"Total images loaded: {len(st.session_state.images)}")
+
+    # Display method
+    display_method = st.radio("Display method:", ["Animated Grid", "Static Grid (Debug)"], horizontal=True)
+
+    if display_method == "Static Grid (Debug)":
+        # Fallback: Simple Streamlit grid
+        st.write("Static grid (for debugging):")
+        for row in range(10):
+            cols = st.columns(10)
+            for col in range(10):
+                idx = row * 10 + col
+                if idx < len(st.session_state.images):
+                    with cols[col]:
+                        st.image(st.session_state.images[idx], use_column_width=True)
+    else:
+        # Create and display animated grid
+        grid_html = create_grid(st.session_state.images)
+
+        # Display with complete style block
+        st.markdown("### Grid should appear below this line:", unsafe_allow_html=True)
+
+        complete_html = f"""
+        <style>
+            .grid {{
+                display: grid;
+                grid-template-columns: repeat(10, 1fr);
+                gap: 8px;
+                width: 100%;
+                max-width: 800px;
+                min-height: 800px;
+                margin: 20px auto;
+                padding: 20px;
+                background: #1a1a1a;
+                border-radius: 10px;
+                border: 2px solid #333;
+                box-shadow: 0 0 20px rgba(0, 0, 0, 0.5);
+            }}
+
+            .circle {{
+                aspect-ratio: 1;
+                border-radius: 50%;
+                background: #444;
+                overflow: hidden;
+                position: relative;
+                opacity: 1;
+                transition: all 0.3s ease;
+                border: 1px solid #555;
+                cursor: pointer;
+            }}
+
+            .circle:hover {{
+                transform: scale(1.05);
+                border-color: #777;
+            }}
+
+            .circle.loaded {{
+                opacity: 1;
+            }}
+
+            .circle img {{
+                width: 100%;
+                height: 100%;
+                object-fit: cover;
+                transition: opacity 0.5s ease;
+            }}
+
+            .circle.color-mode img {{
+                opacity: 0;
+            }}
+        </style>
+        {grid_html}
+        """
+
+        st.markdown(complete_html, unsafe_allow_html=True)
+
+        # Instructions
+        st.markdown("""
+        <p style="text-align: center; color: #888; margin: 10px 0;">
+        Check browser console (F12) for debug messages. Grid should appear below.
+        </p>
+        """, unsafe_allow_html=True)
+
+        # Test HTML rendering first
+        test_simple = st.checkbox("Show simple test grid")
+        if test_simple:
+            st.markdown("""
+            <div style="display: grid; grid-template-columns: repeat(5, 1fr); gap: 10px; padding: 20px; background: #333; border-radius: 10px;">
+                <div style="width: 50px; height: 50px; background: red; border-radius: 50%;"></div>
+                <div style="width: 50px; height: 50px; background: green; border-radius: 50%;"></div>
+                <div style="width: 50px; height: 50px; background: blue; border-radius: 50%;"></div>
+                <div style="width: 50px; height: 50px; background: yellow; border-radius: 50%;"></div>
+                <div style="width: 50px; height: 50px; background: purple; border-radius: 50%;"></div>
+            </div>
+            <p>If you see 5 colored circles above, HTML grid rendering works.</p>
+            """, unsafe_allow_html=True)
+
+    # Add a simple test to verify images are loading
+    with st.expander("Debug: View first 5 images"):
+        if st.session_state.images:
+            debug_cols = st.columns(5)
+            for i in range(min(5, len(st.session_state.images))):
+                with debug_cols[i]:
+                    st.image(st.session_state.images[i], caption=f"Image {i + 1}")
 else:
     st.markdown("""
     <div style='text-align: center; padding: 4rem; color: #666;'>
-        <p>Enter a search term above to create your color dot grid</p>
+        <p>Enter a search term above or enable test mode to create your color dot grid</p>
     </div>
     """, unsafe_allow_html=True)
