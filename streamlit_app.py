@@ -42,7 +42,7 @@ st.markdown("""
         padding: 1px;
         background: white;
         border-radius: 0px;
-        border: 0px solid #f0f0f0;
+        border: none;
     }
 
     /* Circles */
@@ -54,7 +54,12 @@ st.markdown("""
         position: relative;
         opacity: 1;
         transition: all 0.3s ease;
-        border: 0px solid #e0e0e0;
+        border: none;
+        cursor: pointer;
+    }
+
+    .circle:hover {
+        transform: scale(1.05);
     }
 
     .circle.loaded {
@@ -70,6 +75,29 @@ st.markdown("""
 
     .circle.color-mode img {
         opacity: 0;
+    }
+
+    /* Hex tooltip */
+    .circle .hex-tooltip {
+        position: absolute;
+        top: 50%;
+        left: 50%;
+        transform: translate(-50%, -50%);
+        background: rgba(0, 0, 0, 0.8);
+        color: white;
+        padding: 4px 8px;
+        border-radius: 4px;
+        font-size: 12px;
+        font-family: monospace;
+        opacity: 0;
+        transition: opacity 0.2s ease;
+        pointer-events: none;
+        white-space: nowrap;
+        z-index: 10;
+    }
+
+    .circle:hover .hex-tooltip {
+        opacity: 1;
     }
 </style>
 """, unsafe_allow_html=True)
@@ -240,6 +268,12 @@ def create_grid(images):
                         setTimeout(() => {{
                             slot.classList.add('color-mode');
                             slot.style.backgroundColor = img.color;
+
+                            // Add hex tooltip
+                            const tooltip = document.createElement('div');
+                            tooltip.className = 'hex-tooltip';
+                            tooltip.textContent = img.color;
+                            slot.appendChild(tooltip);
                         }}, 2000);
                     }}
                 }}, delay);
@@ -321,8 +355,7 @@ if st.session_state.images:
                 padding: 20px;
                 background: white;
                 border-radius: 10px;
-                border: 1px solid #f0f0f0;
-                box-shadow: 0 4px 6px rgba(0, 0, 0, 0.1);
+                border: none;
             }}
 
             .circle {{
@@ -333,14 +366,12 @@ if st.session_state.images:
                 position: relative;
                 opacity: 1;
                 transition: all 0.3s ease;
-                border: 1px solid #e0e0e0;
+                border: none;
                 cursor: pointer;
             }}
 
             .circle:hover {{
                 transform: scale(1.05);
-                border-color: #ccc;
-                box-shadow: 0 2px 4px rgba(0, 0, 0, 0.1);
             }}
 
             .circle.loaded {{
@@ -356,6 +387,29 @@ if st.session_state.images:
 
             .circle.color-mode img {{
                 opacity: 0;
+            }}
+
+            /* Hex tooltip */
+            .circle .hex-tooltip {{
+                position: absolute;
+                top: 50%;
+                left: 50%;
+                transform: translate(-50%, -50%);
+                background: rgba(0, 0, 0, 0.8);
+                color: white;
+                padding: 4px 8px;
+                border-radius: 4px;
+                font-size: 12px;
+                font-family: monospace;
+                opacity: 0;
+                transition: opacity 0.2s ease;
+                pointer-events: none;
+                white-space: nowrap;
+                z-index: 10;
+            }}
+
+            .circle:hover .hex-tooltip {{
+                opacity: 1;
             }}
         </style>
     </head>
