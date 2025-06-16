@@ -120,6 +120,8 @@ st.markdown("""
 # Initialize session state
 if 'images' not in st.session_state:
     st.session_state.images = []
+if 'sorted_mode' not in st.session_state:
+    st.session_state.sorted_mode = False
 
 # Google API credentials (use secrets in production)
 API_KEY = st.secrets.get("GOOGLE_API_KEY", "")
@@ -234,7 +236,7 @@ def image_to_base64(img):
     return base64.b64encode(buffered.getvalue()).decode()
 
 
-def create_grid(images):
+def create_grid(images, sorted_mode=False):
     """Create the animated grid HTML"""
     # Prepare image data
     image_data = []
@@ -246,6 +248,10 @@ def create_grid(images):
             })
         except Exception as e:
             pass
+
+    # Sort by hex color if in sorted mode
+    if sorted_mode:
+        image_data.sort(key=lambda x: x['color'])
 
     # Create grid HTML
     html = '<div class="grid" id="imageGrid">'
@@ -259,18 +265,22 @@ def create_grid(images):
     (function() {{
         const images = {json.dumps(image_data)};
         const slots = Array.from({{length: 100}}, (_, i) => i);
+        const sortedMode = {str(sorted_mode).lower()};
 
-        // Shuffle slots for random placement
-        for (let i = slots.length - 1; i > 0; i--) {{
-            const j = Math.floor(Math.random() * (i + 1));
-            [slots[i], slots[j]] = [slots[j], slots[i]];
+        // If not sorted, shuffle slots for random placement
+        if (!sortedMode) {{
+            for (let i = slots.length - 1; i > 0; i--) {{
+                const j = Math.floor(Math.random() * (i + 1));
+                [slots[i], slots[j]] = [slots[j], slots[i]];
+            }}
         }}
 
         // Load images one by one
         images.forEach((img, index) => {{
             if (index < 100) {{
-                const slotId = slots[index];
-                const delay = index * 100; // 100ms between each
+                const slotId = sortedMode ? index : slots[index];
+                // For sorted mode, create a wave effect; for random mode, use standard delay
+                const delay = sortedMode ? index * 25 : index * 100;
 
                 setTimeout(() => {{
                     const slot = document.getElementById('slot-' + slotId);
@@ -337,6 +347,7 @@ with st.sidebar:
 
                         progress_bar.empty()
                         st.session_state.images = images
+                        st.session_state.sorted_mode = False  # Reset sorted mode on new search
                         st.success(f"Found {len(images)} images")
                 else:
                     st.error("No images found")
@@ -346,17 +357,35 @@ with st.sidebar:
     # Add reselect colors button if images are loaded
     if st.session_state.images:
         st.markdown("---")
-        st.markdown("### Reselect Colors")
-        st.markdown("<small style='color: #666;'>Pick new random pixels from each image</small>",
+        st.markdown("### Color Options")
+
+        # Reselect colors
+        st.markdown("##### Pick New Colors")
+        st.markdown("<small style='color: #666;'>Sample different pixels from each image</small>",
                     unsafe_allow_html=True)
-        if st.button("🎲 Pick New Colors", use_container_width=True):
-            # Force a refresh to re-pick colors
+        if st.button("🎲 Reselect Colors", use_container_width=True):
+            # Force a refresh to re-pick colors (maintains sorted state)
+            st.rerun()
+
+        # Sort button
+        st.markdown("##### Arrange Grid")
+        help_text = "Random layout" if st.session_state.sorted_mode else "Sort colors from #000000 to #FFFFFF"
+        st.markdown(f"<small style='color: #666;'>{help_text}</small>", unsafe_allow_html=True)
+        button_text = "🔀 Randomize Order" if st.session_state.sorted_mode else "🎨 Sort by Hex"
+        if st.button(button_text, use_container_width=True):
+            st.session_state.sorted_mode = not st.session_state.sorted_mode
             st.rerun()
 
 # Display grid
 if st.session_state.images:
+    # Show current mode with subtle styling
+    if st.session_state.sorted_mode:
+        st.markdown(
+            "<p style='text-align: center; color: #999; font-size: 0.9em; margin-bottom: 0.5rem;'>Sorted by hex value</p>",
+            unsafe_allow_html=True)
+
     # Create and display animated grid
-    grid_html = create_grid(st.session_state.images)
+    grid_html = create_grid(st.session_state.images, st.session_state.sorted_mode)
 
     # Create complete HTML document
     html_content = f"""
