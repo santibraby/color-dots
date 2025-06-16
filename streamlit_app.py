@@ -1,15 +1,9 @@
 import streamlit as st
 import os
-import time
 import requests
-from selenium import webdriver
-from selenium.webdriver.common.by import By
-from selenium.webdriver.common.keys import Keys
-from selenium.webdriver.support.ui import WebDriverWait
-from selenium.webdriver.support import expected_conditions as EC
-import base64
 from PIL import Image
 import io
+import base64
 
 # Page configuration
 st.set_page_config(
@@ -119,6 +113,10 @@ st.markdown("""
 
 class ColorDotsApp:
     def __init__(self):
+        # Google Custom Search API credentials
+        # IMPORTANT: In production, use environment variables or Streamlit secrets!
+        self.API_KEY = st.secrets["GOOGLE_API_KEY"]
+        self.SEARCH_ENGINE_ID = st.secrets["GOOGLE_CX"]
         self.setup_session_state()
 
     def setup_session_state(self):
@@ -127,101 +125,86 @@ class ColorDotsApp:
             st.session_state.images = []
         if 'last_search' not in st.session_state:
             st.session_state.last_search = ""
-
-    def create_driver(self):
-        """Create Chrome driver with appropriate settings"""
-        options = webdriver.ChromeOptions()
-
-        # Essential options for Streamlit Cloud
-        options.add_argument('--headless')
-        options.add_argument('--no-sandbox')
-        options.add_argument('--disable-dev-shm-usage')
-        options.add_argument('--disable-gpu')
-
-        # Set Chrome binary location for Streamlit Cloud
-        options.binary_location = '/usr/bin/chromium'
-
-        try:
-            # Simple initialization - let Selenium find chromedriver
-            driver = webdriver.Chrome(options=options)
-            return driver
-
-        except Exception as e:
-            st.error(f"Chrome driver error: {str(e)}")
-            raise
+        if 'api_calls_made' not in st.session_state:
+            st.session_state.api_calls_made = 0
 
     def search_google_images(self, query, num_images=100):
-        """Perform Google image search and return thumbnail URLs"""
-        driver = None
-        thumbnails = []
+        """Search for images using Google Custom Search API"""
+        base_url = "https://www.googleapis.com/customsearch/v1"
 
-        try:
-            driver = self.create_driver()
+        all_items = []
+        images_collected = 0
 
-            # Navigate to Google Images
-            driver.get("https://www.google.com/imghp")
+        # Google Custom Search API returns max 10 results per call
+        # We'll need to make multiple calls for 100 images
+        max_calls = min(10, (num_images + 9) // 10)  # Max 10 calls (100 images)
 
-            # Search for query
-            search_box = WebDriverWait(driver, 10).until(
-                EC.presence_of_element_located((By.NAME, "q"))
-            )
-            search_box.send_keys(query)
-            search_box.send_keys(Keys.RETURN)
+        for start_index in range(0, max_calls * 10, 10):
+            if images_collected >= num_images:
+                break
 
-            # Wait for results
-            time.sleep(2)
+            params = {
+                "key": self.API_KEY,
+                "cx": self.SEARCH_ENGINE_ID,
+                "q": query,
+                "searchType": "image",
+                "num": 10,  # Max allowed per request
+                "start": start_index + 1,  # API uses 1-based indexing
+                "safe": "active",
+                "imgSize": "medium"  # Get medium-sized images for better quality
+            }
 
-            # Collect thumbnails
-            collected = 0
-            last_height = driver.execute_script("return document.body.scrollHeight")
+            try:
+                response = requests.get(base_url, params=params)
+                response.raise_for_status()
+                data = response.json()
 
-            while collected < num_images:
-                # Find all thumbnail images
-                images = driver.find_elements(By.CSS_SELECTOR, "img.YQ4gaf")
+                if "items" in data:
+                    all_items.extend(data["items"])
+                    images_collected += len(data["items"])
+                    st.session_state.api_calls_made += 1
 
-                for img in images[collected:]:
-                    if collected >= num_images:
-                        break
+                    # Update progress
+                    if hasattr(self, 'progress'):
+                        self.progress.progress(images_collected / num_images)
 
-                    try:
-                        src = img.get_attribute("src")
-                        if src and (src.startswith("http") or src.startswith("data:")):
-                            thumbnails.append(src)
-                            collected += 1
-                    except:
-                        continue
-
-                # Scroll down to load more
-                driver.execute_script("window.scrollTo(0, document.body.scrollHeight);")
-                time.sleep(1)
-
-                # Check if reached bottom
-                new_height = driver.execute_script("return document.body.scrollHeight")
-                if new_height == last_height:
+                else:
+                    # No more results
                     break
-                last_height = new_height
 
-        finally:
-            if driver:
-                driver.quit()
+            except requests.exceptions.RequestException as e:
+                st.error(f"API request failed: {e}")
+                if response.status_code == 429:
+                    st.error("API quota exceeded. Please try again later.")
+                break
 
-        return thumbnails[:num_images]
+        return all_items[:num_images]
 
-    def url_to_image(self, url):
-        """Convert URL or base64 to PIL Image"""
+    def load_image_from_url(self, url, timeout=5):
+        """Load image from URL with error handling"""
         try:
-            if url.startswith("data:"):
-                # Handle base64
-                header, data = url.split(",", 1)
-                img_data = base64.b64decode(data)
-                return Image.open(io.BytesIO(img_data))
-            else:
-                # Handle URL
-                response = requests.get(url, timeout=5)
-                return Image.open(io.BytesIO(response.content))
-        except:
-            # Return placeholder
-            return Image.new('RGB', (100, 100), color='#e0e0e0')
+            headers = {
+                'User-Agent': 'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36'
+            }
+            response = requests.get(url, timeout=timeout, headers=headers)
+            response.raise_for_status()
+            img = Image.open(io.BytesIO(response.content))
+
+            # Convert to RGB if necessary
+            if img.mode not in ('RGB', 'RGBA'):
+                img = img.convert('RGB')
+
+            # Resize if too large (for performance)
+            max_size = 500
+            if img.width > max_size or img.height > max_size:
+                img.thumbnail((max_size, max_size), Image.Resampling.LANCZOS)
+
+            return img
+
+        except Exception as e:
+            # Return a placeholder image on error
+            placeholder = Image.new('RGB', (200, 200), color='#e0e0e0')
+            return placeholder
 
     def create_image_grid(self, images):
         """Create HTML grid of circular images"""
@@ -232,11 +215,16 @@ class ColorDotsApp:
             # Convert to base64 for embedding
             buffered = io.BytesIO()
 
-            # Simple conversion - always convert to RGB
-            if img.mode != 'RGB':
+            # Convert to RGB if needed
+            if img.mode == 'RGBA':
+                # Create white background
+                background = Image.new('RGB', img.size, (255, 255, 255))
+                background.paste(img, mask=img.split()[3])
+                img = background
+            elif img.mode != 'RGB':
                 img = img.convert('RGB')
 
-            # Now save as JPEG
+            # Save as JPEG
             img.save(buffered, format="JPEG", quality=85)
             img_str = base64.b64encode(buffered.getvalue()).decode()
 
@@ -287,49 +275,89 @@ class ColorDotsApp:
                 st.metric("Images found", len(st.session_state.images))
                 st.caption(f"Last search: {st.session_state.last_search}")
 
+            # API usage info
+            st.markdown("---")
+            st.markdown("### API Usage")
+            st.metric("API calls today", st.session_state.api_calls_made)
+            st.caption("Free tier: 100 calls/day")
+
+            # Security warning
+            with st.expander("⚠️ Security Notice"):
+                st.warning("""
+                **Important:** The API key is currently hardcoded. 
+
+                For production use:
+                1. Create a `.streamlit/secrets.toml` file
+                2. Add: `GOOGLE_API_KEY = "your_key"`
+                3. Access via: `st.secrets["GOOGLE_API_KEY"]`
+
+                Never commit API keys to version control!
+                """)
+
         # Main area
         if search_clicked and search_query:
             st.session_state.images = []
             st.session_state.last_search = search_query
 
             # Progress indicators
-            progress = st.progress(0)
+            self.progress = st.progress(0)
             status = st.empty()
 
             try:
-                # Search images
+                # Search images using Google Custom Search API
                 status.markdown('<p class="status-text">🔍 Searching Google Images...</p>',
                                 unsafe_allow_html=True)
 
-                thumbnails = self.search_google_images(search_query)
+                # Get image metadata from API
+                image_items = self.search_google_images(search_query)
 
-                if thumbnails:
+                if image_items:
                     # Process images
-                    status.markdown('<p class="status-text">🎨 Processing images...</p>',
+                    status.markdown('<p class="status-text">🎨 Loading and processing images...</p>',
                                     unsafe_allow_html=True)
 
                     images = []
-                    for i, url in enumerate(thumbnails):
-                        img = self.url_to_image(url)
-                        images.append(img)
-                        progress.progress((i + 1) / len(thumbnails))
+                    failed_count = 0
+
+                    for i, item in enumerate(image_items):
+                        # Get the image URL
+                        image_url = item.get("link")
+
+                        if image_url:
+                            # Load the image
+                            img = self.load_image_from_url(image_url)
+                            images.append(img)
+                        else:
+                            failed_count += 1
+
+                        # Update progress
+                        self.progress.progress((i + 1) / len(image_items))
 
                     st.session_state.images = images
 
                     # Clear progress
-                    progress.empty()
+                    self.progress.empty()
                     status.empty()
 
-                    st.success(f"✅ Found {len(images)} images for '{search_query}'")
+                    # Show results
+                    success_msg = f"✅ Found {len(images)} images for '{search_query}'"
+                    if failed_count > 0:
+                        success_msg += f" ({failed_count} failed to load)"
+                    st.success(success_msg)
+
                 else:
                     st.warning("No images found. Try a different search term.")
-                    progress.empty()
+                    self.progress.empty()
                     status.empty()
 
             except Exception as e:
                 st.error(f"Error: {str(e)}")
-                progress.empty()
+                self.progress.empty()
                 status.empty()
+
+                # Check if it's an API key issue
+                if "API key not valid" in str(e):
+                    st.error("Invalid API key. Please check your Google Custom Search API configuration.")
 
         # Display results
         if st.session_state.images:
@@ -343,6 +371,9 @@ class ColorDotsApp:
                 <h1 style="font-size: 48px; margin-bottom: 20px;">Welcome to Color Dots</h1>
                 <p style="font-size: 18px; color: #666;">
                     Search for any topic to create a beautiful circular image grid
+                </p>
+                <p style="font-size: 14px; color: #999; margin-top: 20px;">
+                    Powered by Google Custom Search API
                 </p>
             </div>
             """, unsafe_allow_html=True)
