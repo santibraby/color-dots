@@ -120,8 +120,8 @@ st.markdown("""
 # Initialize session state
 if 'images' not in st.session_state:
     st.session_state.images = []
-if 'sorted_mode' not in st.session_state:
-    st.session_state.sorted_mode = False
+if 'sort_mode' not in st.session_state:
+    st.session_state.sort_mode = 'random'  # random, hex, hue
 
 # Google API credentials (use secrets in production)
 API_KEY = st.secrets.get("GOOGLE_API_KEY", "")
@@ -236,7 +236,42 @@ def image_to_base64(img):
     return base64.b64encode(buffered.getvalue()).decode()
 
 
-def create_grid(images, sorted_mode=False):
+def hex_to_hsl(hex_color):
+    """Convert hex color to HSL values"""
+    hex_color = hex_color.lstrip('#')
+    r = int(hex_color[0:2], 16) / 255.0
+    g = int(hex_color[2:4], 16) / 255.0
+    b = int(hex_color[4:6], 16) / 255.0
+
+    max_val = max(r, g, b)
+    min_val = min(r, g, b)
+    diff = max_val - min_val
+
+    # Lightness
+    l = (max_val + min_val) / 2
+
+    if diff == 0:
+        h = 0
+        s = 0
+    else:
+        # Saturation
+        if l == 0 or l == 1:
+            s = 0
+        else:
+            s = diff / (1 - abs(2 * l - 1))
+
+        # Hue
+        if max_val == r:
+            h = ((g - b) / diff + (6 if g < b else 0)) / 6
+        elif max_val == g:
+            h = ((b - r) / diff + 2) / 6
+        else:
+            h = ((r - g) / diff + 4) / 6
+
+    return h, s, l
+
+
+def create_grid(images, sort_mode='random'):
     """Create the animated grid HTML"""
     # Prepare image data
     image_data = []
@@ -249,9 +284,20 @@ def create_grid(images, sorted_mode=False):
         except Exception as e:
             pass
 
-    # Sort by hex color if in sorted mode
-    if sorted_mode:
+    # Sort by color if not in random mode
+    if sort_mode == 'hex':
+        # Sort by hex value
         image_data.sort(key=lambda x: x['color'])
+    elif sort_mode == 'hue':
+        # Sort by hue for color grouping
+        def hue_sort_key(item):
+            h, s, l = hex_to_hsl(item['color'])
+            # Put grays (low saturation) at the end
+            if s < 0.1:
+                return 1.0 + l  # Sort grays by lightness
+            return h
+
+        image_data.sort(key=hue_sort_key)
 
     # Create grid HTML
     html = '<div class="grid" id="imageGrid">'
@@ -265,10 +311,10 @@ def create_grid(images, sorted_mode=False):
     (function() {{
         const images = {json.dumps(image_data)};
         const slots = Array.from({{length: 100}}, (_, i) => i);
-        const sortedMode = {str(sorted_mode).lower()};
+        const sortMode = '{sort_mode}';
 
-        // If not sorted, shuffle slots for random placement
-        if (!sortedMode) {{
+        // If random mode, shuffle slots
+        if (sortMode === 'random') {{
             for (let i = slots.length - 1; i > 0; i--) {{
                 const j = Math.floor(Math.random() * (i + 1));
                 [slots[i], slots[j]] = [slots[j], slots[i]];
@@ -278,9 +324,9 @@ def create_grid(images, sorted_mode=False):
         // Load images one by one
         images.forEach((img, index) => {{
             if (index < 100) {{
-                const slotId = sortedMode ? index : slots[index];
-                // For sorted mode, create a wave effect; for random mode, use standard delay
-                const delay = sortedMode ? index * 25 : index * 100;
+                const slotId = sortMode === 'random' ? slots[index] : index;
+                // Faster animation for sorted modes
+                const delay = sortMode === 'random' ? index * 100 : index * 25;
 
                 setTimeout(() => {{
                     const slot = document.getElementById('slot-' + slotId);
@@ -347,7 +393,7 @@ with st.sidebar:
 
                         progress_bar.empty()
                         st.session_state.images = images
-                        st.session_state.sorted_mode = False  # Reset sorted mode on new search
+                        st.session_state.sort_mode = 'random'  # Reset sort mode on new search
                         st.success(f"Found {len(images)} images")
                 else:
                     st.error("No images found")
@@ -364,28 +410,43 @@ with st.sidebar:
         st.markdown("<small style='color: #666;'>Sample different pixels from each image</small>",
                     unsafe_allow_html=True)
         if st.button("🎲 Reselect Colors", use_container_width=True):
-            # Force a refresh to re-pick colors (maintains sorted state)
+            # Force a refresh to re-pick colors (maintains sort mode)
             st.rerun()
 
         # Sort button
         st.markdown("##### Arrange Grid")
-        help_text = "Random layout" if st.session_state.sorted_mode else "Sort colors from #000000 to #FFFFFF"
+        if st.session_state.sort_mode == 'random':
+            help_text = "Sort colors by hex value"
+            button_text = "🎨 Sort by Hex"
+            next_mode = 'hex'
+        elif st.session_state.sort_mode == 'hex':
+            help_text = "Group colors by hue (reds, greens, blues...)"
+            button_text = "🌈 Sort by Hue"
+            next_mode = 'hue'
+        else:  # hue
+            help_text = "Random layout"
+            button_text = "🔀 Randomize Order"
+            next_mode = 'random'
+
         st.markdown(f"<small style='color: #666;'>{help_text}</small>", unsafe_allow_html=True)
-        button_text = "🔀 Randomize Order" if st.session_state.sorted_mode else "🎨 Sort by Hex"
         if st.button(button_text, use_container_width=True):
-            st.session_state.sorted_mode = not st.session_state.sorted_mode
+            st.session_state.sort_mode = next_mode
             st.rerun()
 
 # Display grid
 if st.session_state.images:
     # Show current mode with subtle styling
-    if st.session_state.sorted_mode:
+    if st.session_state.sort_mode == 'hex':
         st.markdown(
             "<p style='text-align: center; color: #999; font-size: 0.9em; margin-bottom: 0.5rem;'>Sorted by hex value</p>",
             unsafe_allow_html=True)
+    elif st.session_state.sort_mode == 'hue':
+        st.markdown(
+            "<p style='text-align: center; color: #999; font-size: 0.9em; margin-bottom: 0.5rem;'>Sorted by hue (color families)</p>",
+            unsafe_allow_html=True)
 
     # Create and display animated grid
-    grid_html = create_grid(st.session_state.images, st.session_state.sorted_mode)
+    grid_html = create_grid(st.session_state.images, st.session_state.sort_mode)
 
     # Create complete HTML document
     html_content = f"""
