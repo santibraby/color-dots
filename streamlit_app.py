@@ -113,11 +113,43 @@ st.markdown("""
 
 class ColorDotsApp:
     def __init__(self):
-        # Google Custom Search API credentials
-        # IMPORTANT: In production, use environment variables or Streamlit secrets!
-        self.API_KEY = st.secrets["GOOGLE_API_KEY"]
-        self.SEARCH_ENGINE_ID = st.secrets["GOOGLE_CX"]
+        # Google Custom Search API credentials from Streamlit secrets
+        self.setup_api_credentials()
         self.setup_session_state()
+
+    def setup_api_credentials(self):
+        """Setup API credentials from Streamlit secrets or environment variables"""
+        try:
+            # Try to get from Streamlit secrets first
+            self.API_KEY = st.secrets["GOOGLE_API_KEY"]
+            self.SEARCH_ENGINE_ID = st.secrets["GOOGLE_CX"]
+        except KeyError:
+            # Fallback to environment variables
+            self.API_KEY = os.getenv("GOOGLE_API_KEY", "")
+            self.SEARCH_ENGINE_ID = os.getenv("GOOGLE_CX", "")
+
+            if not self.API_KEY or not self.SEARCH_ENGINE_ID:
+                st.error("""
+                ⚠️ **API Credentials Not Found**
+
+                Please set up your credentials in one of these ways:
+
+                **Option 1: Streamlit Secrets (Recommended)**
+                1. Create `.streamlit/secrets.toml` in your project root
+                2. Add:
+                ```
+                GOOGLE_API_KEY = "your_api_key"
+                GOOGLE_CX = "your_search_engine_id"
+                ```
+
+                **Option 2: Environment Variables**
+                Set `GOOGLE_API_KEY` and `GOOGLE_CX` as environment variables.
+
+                **Getting your credentials:**
+                - API Key: [Google Cloud Console](https://console.cloud.google.com/apis/credentials)
+                - Search Engine ID: [Programmable Search Engine](https://programmablesearchengine.google.com/)
+                """)
+                st.stop()
 
     def setup_session_state(self):
         """Initialize session state variables"""
@@ -281,21 +313,29 @@ class ColorDotsApp:
             st.metric("API calls today", st.session_state.api_calls_made)
             st.caption("Free tier: 100 calls/day")
 
-            # Security warning
-            with st.expander("⚠️ Security Notice"):
-                st.warning("""
-                **Important:** The API key is currently hardcoded. 
+            # API info
+            with st.expander("ℹ️ API Configuration"):
+                if self.API_KEY and self.SEARCH_ENGINE_ID:
+                    st.success("✅ API credentials configured")
+                    st.caption(f"Search Engine ID: {self.SEARCH_ENGINE_ID}")
+                else:
+                    st.error("❌ API credentials not found")
 
-                For production use:
-                1. Create a `.streamlit/secrets.toml` file
-                2. Add: `GOOGLE_API_KEY = "your_key"`
-                3. Access via: `st.secrets["GOOGLE_API_KEY"]`
+                st.info("""
+                **Google Custom Search API Limits:**
+                - Free: 100 queries/day
+                - Each search uses ~10 API calls for 100 images
 
-                Never commit API keys to version control!
+                **Need more quota?**
+                Upgrade to paid tier in Google Cloud Console
                 """)
-
         # Main area
         if search_clicked and search_query:
+            # Check if API credentials are configured
+            if not self.API_KEY or not self.SEARCH_ENGINE_ID:
+                st.error("API credentials not configured. Please check the sidebar for setup instructions.")
+                return
+
             st.session_state.images = []
             st.session_state.last_search = search_query
 
@@ -355,9 +395,20 @@ class ColorDotsApp:
                 self.progress.empty()
                 status.empty()
 
-                # Check if it's an API key issue
+                # Provide specific error guidance
                 if "API key not valid" in str(e):
+                    st.error("""
+                    **Invalid API Key**
+
+                    Please check:
+                    1. Your API key is correct in `.streamlit/secrets.toml`
+                    2. The Custom Search API is enabled in Google Cloud Console
+                    3. Your API key has not been regenerated or revoked
+                    """)
+                elif "invalid API key" in str(e).lower():
                     st.error("Invalid API key. Please check your Google Custom Search API configuration.")
+                elif "quota" in str(e).lower():
+                    st.error("API quota exceeded. The free tier allows 100 queries per day.")
 
         # Display results
         if st.session_state.images:
