@@ -1,4 +1,5 @@
 import streamlit as st
+import streamlit.components.v1 as components
 import requests
 from PIL import Image
 import io
@@ -197,9 +198,7 @@ def create_grid(images):
                 'color': get_random_color(img)
             })
         except Exception as e:
-            st.error(f"Error processing image: {e}")
-
-    st.write(f"Processed {len(image_data)} images for grid")
+            pass
 
     # Create grid HTML
     html = '<div class="grid" id="imageGrid">'
@@ -210,10 +209,8 @@ def create_grid(images):
     # Add animation script
     html += f'''
     <script>
-    console.log("Starting grid animation...");
-    window.addEventListener('load', function() {{
+    (function() {{
         const images = {json.dumps(image_data)};
-        console.log("Image data loaded:", images.length);
         const slots = Array.from({{length: 100}}, (_, i) => i);
 
         // Shuffle slots for random placement
@@ -230,7 +227,6 @@ def create_grid(images):
 
                 setTimeout(() => {{
                     const slot = document.getElementById('slot-' + slotId);
-                    console.log('Loading image', index, 'into slot', slotId);
                     if (slot) {{
                         slot.innerHTML = '<img src="data:image/jpeg;base64,' + img.base64 + '" alt="">';
                         slot.style.opacity = '1';
@@ -241,13 +237,11 @@ def create_grid(images):
                             slot.classList.add('color-mode');
                             slot.style.backgroundColor = img.color;
                         }}, 2000);
-                    }} else {{
-                        console.error('Slot not found:', slotId);
                     }}
                 }}, delay);
             }}
         }});
-    }});
+    }})();
     </script>
     '''
 
@@ -337,62 +331,73 @@ if st.session_state.images:
         # Create and display animated grid
         grid_html = create_grid(st.session_state.images)
 
-        # Display with complete style block
-        st.markdown("### Grid should appear below this line:", unsafe_allow_html=True)
+        # Create complete HTML document
+        html_content = f"""
+        <!DOCTYPE html>
+        <html>
+        <head>
+            <style>
+                body {{
+                    margin: 0;
+                    padding: 0;
+                    background: transparent;
+                }}
 
-        complete_html = f"""
-        <style>
-            .grid {{
-                display: grid;
-                grid-template-columns: repeat(10, 1fr);
-                gap: 8px;
-                width: 100%;
-                max-width: 800px;
-                min-height: 800px;
-                margin: 20px auto;
-                padding: 20px;
-                background: #1a1a1a;
-                border-radius: 10px;
-                border: 2px solid #333;
-                box-shadow: 0 0 20px rgba(0, 0, 0, 0.5);
-            }}
+                .grid {{
+                    display: grid;
+                    grid-template-columns: repeat(10, 1fr);
+                    gap: 8px;
+                    width: 100%;
+                    max-width: 800px;
+                    margin: 20px auto;
+                    padding: 20px;
+                    background: #1a1a1a;
+                    border-radius: 10px;
+                    border: 2px solid #333;
+                    box-shadow: 0 0 20px rgba(0, 0, 0, 0.5);
+                }}
 
-            .circle {{
-                aspect-ratio: 1;
-                border-radius: 50%;
-                background: #444;
-                overflow: hidden;
-                position: relative;
-                opacity: 1;
-                transition: all 0.3s ease;
-                border: 1px solid #555;
-                cursor: pointer;
-            }}
+                .circle {{
+                    aspect-ratio: 1;
+                    border-radius: 50%;
+                    background: #444;
+                    overflow: hidden;
+                    position: relative;
+                    opacity: 1;
+                    transition: all 0.3s ease;
+                    border: 1px solid #555;
+                    cursor: pointer;
+                }}
 
-            .circle:hover {{
-                transform: scale(1.05);
-                border-color: #777;
-            }}
+                .circle:hover {{
+                    transform: scale(1.05);
+                    border-color: #777;
+                }}
 
-            .circle.loaded {{
-                opacity: 1;
-            }}
+                .circle.loaded {{
+                    opacity: 1;
+                }}
 
-            .circle img {{
-                width: 100%;
-                height: 100%;
-                object-fit: cover;
-                transition: opacity 0.5s ease;
-            }}
+                .circle img {{
+                    width: 100%;
+                    height: 100%;
+                    object-fit: cover;
+                    transition: opacity 0.5s ease;
+                }}
 
-            .circle.color-mode img {{
-                opacity: 0;
-            }}
-        </style>
-        {grid_html}
+                .circle.color-mode img {{
+                    opacity: 0;
+                }}
+            </style>
+        </head>
+        <body>
+            {grid_html}
+        </body>
+        </html>
         """
 
-        st.markdown(complete_html, unsafe_allow_html=True)
+        # Use components.html for proper rendering
+        components.html(html_content, height=900, scrolling=False)
 
         # Instructions
         st.markdown("""
