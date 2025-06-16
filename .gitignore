@@ -19,6 +19,7 @@ ENV/
 
 # Streamlit
 .streamlit/secrets.toml
+.streamlit/secrets*.toml
 *.log
 
 # Temporary files
