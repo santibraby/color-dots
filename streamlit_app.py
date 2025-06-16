@@ -23,6 +23,8 @@ st.markdown("""
     .block-container {
         padding-top: 2rem;
         max-width: 100%;
+        padding-left: 0.5rem;
+        padding-right: 0.5rem;
     }
 
     /* White background for the app */
@@ -59,10 +61,15 @@ st.markdown("""
         cursor: pointer;
     }
 
-    /* Mobile responsive - 4 columns */
+    /* Mobile responsive - 5 columns */
     @media (max-width: 768px) {
         .circle {
-            width: calc(25% - 6px); /* 4 columns with gap */
+            width: calc(20% - 6.4px); /* 5 columns with gap */
+        }
+
+        /* Fix iframe sizing on mobile */
+        iframe {
+            width: 100% !important;
         }
     }
 
@@ -352,20 +359,23 @@ if st.session_state.images:
                 margin: 0;
                 padding: 0;
                 background: white;
+                overflow-x: hidden;
+                width: 100%;
             }}
 
             .grid {{
                 display: flex;
                 flex-wrap: wrap;
                 gap: 8px;
-                width: 100%;
+                width: calc(100% - 40px);
                 max-width: 800px;
-                margin: 20px auto;
+                margin: 10px auto;
                 padding: 20px;
                 background: white;
                 border-radius: 10px;
                 border: none;
                 justify-content: center;
+                box-sizing: border-box;
             }}
 
             .circle {{
@@ -379,16 +389,19 @@ if st.session_state.images:
                 transition: all 0.3s ease;
                 border: none;
                 cursor: pointer;
+                box-sizing: border-box;
             }}
 
-            /* Mobile responsive - 4 columns */
+            /* Mobile responsive - 5 columns */
             @media (max-width: 768px) {{
                 .grid {{
+                    width: calc(100% - 20px);
                     padding: 10px;
+                    gap: 6px;
                 }}
 
                 .circle {{
-                    width: calc(25% - 6px); /* 4 columns with gap */
+                    width: calc(20% - 4.8px); /* 5 columns with gap */
                 }}
             }}
 
@@ -442,7 +455,9 @@ if st.session_state.images:
     """
 
     # Use components.html for proper rendering
-    components.html(html_content, height=1100, scrolling=False)
+    # Calculate height based on grid: 100 items / 5 columns = 20 rows for mobile
+    # Account for gaps and padding
+    components.html(html_content, height=1600, scrolling=False)
 
 else:
     st.markdown("""
