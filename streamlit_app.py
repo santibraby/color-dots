@@ -22,7 +22,7 @@ st.markdown("""
     header {visibility: hidden;}
     .block-container {
         padding-top: 2rem;
-        max-width: 900px;
+        max-width: 100%;
     }
 
     /* White background for the app */
@@ -84,17 +84,18 @@ SEARCH_ENGINE_ID = st.secrets.get("GOOGLE_CX", "")
 
 # Check if API is configured
 if not API_KEY or not SEARCH_ENGINE_ID:
-    st.warning("""
-    ⚠️ **API credentials not configured!**
+    with st.sidebar:
+        st.warning("""
+        ⚠️ **API credentials not configured!**
 
-    To use Google Image Search:
-    1. Create `.streamlit/secrets.toml` file
-    2. Add your credentials:
-    ```
-    GOOGLE_API_KEY = "your_api_key"
-    GOOGLE_CX = "your_search_engine_id"
-    ```
-    """)
+        To use Google Image Search:
+        1. Create `.streamlit/secrets.toml` file
+        2. Add your credentials:
+        ```
+        GOOGLE_API_KEY = "your_api_key"
+        GOOGLE_CX = "your_search_engine_id"
+        ```
+        """)
 
 
 def search_google_images(query, num_images=100):
@@ -252,12 +253,12 @@ def create_grid(images):
 
 
 # UI
-st.markdown("<h1 style='text-align: center; margin-bottom: 2rem; color: #333;'>Color Dots</h1>", unsafe_allow_html=True)
-
-# Search controls
-col1, col2, col3 = st.columns([1, 2, 1])
-with col2:
-    query = st.text_input("Search for images", placeholder="Enter any word or phrase...")
+# Sidebar search controls
+with st.sidebar:
+    st.markdown("### 🎨 Color Dots")
+    st.markdown("---")
+    st.markdown("### Search Images")
+    query = st.text_input("Search for images", placeholder="Enter any word or phrase...", label_visibility="collapsed")
     if st.button("Search", use_container_width=True):
         if query and API_KEY and SEARCH_ENGINE_ID:
             with st.spinner("Searching..."):
@@ -369,7 +370,8 @@ if st.session_state.images:
 
 else:
     st.markdown("""
-    <div style='text-align: center; padding: 4rem; color: #666;'>
-        <p>Enter a search term above to create your color dot grid</p>
+    <div style='text-align: center; padding: 8rem 2rem; color: #666;'>
+        <h1 style='color: #333; margin-bottom: 2rem;'>Color Dots</h1>
+        <p>Enter a search term in the sidebar to create your color dot grid</p>
     </div>
     """, unsafe_allow_html=True)
