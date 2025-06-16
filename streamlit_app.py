@@ -65,37 +65,28 @@ st.markdown("""
         padding: 0.5rem;
     }
 
-    /* Image grid */
+    /* Image grid - simplified */
     .image-grid {
-        display: grid;
-        grid-template-columns: repeat(10, 1fr);
-        gap: 12px;
+        display: flex;
+        flex-wrap: wrap;
+        gap: 10px;
         padding: 20px;
-        max-width: 1000px;
+        max-width: 1200px;
         margin: 0 auto;
+        justify-content: center;
     }
 
-    /* Circle images */
+    /* Circle images - simplified */
     .circle-image {
-        position: relative;
-        width: 100%;
-        padding-bottom: 100%;
-        overflow: hidden;
+        width: 80px;
+        height: 80px;
         border-radius: 50%;
+        overflow: hidden;
         background-color: #f0f0f0;
-        box-shadow: 0 2px 8px rgba(0,0,0,0.1);
-        transition: transform 0.3s ease;
-    }
-
-    .circle-image:hover {
-        transform: scale(1.05);
-        box-shadow: 0 4px 16px rgba(0,0,0,0.2);
+        flex-shrink: 0;
     }
 
     .circle-image img {
-        position: absolute;
-        top: 0;
-        left: 0;
         width: 100%;
         height: 100%;
         object-fit: cover;
@@ -183,7 +174,8 @@ class ColorDotsApp:
                 "num": 10,  # Max allowed per request
                 "start": start_index + 1,  # API uses 1-based indexing
                 "safe": "active",
-                "imgSize": "medium"  # Get medium-sized images for better quality
+                "imgSize": "medium",  # Get medium-sized images for better quality
+                "fileType": "jpg|png|jpeg"  # Only get common image formats
             }
 
             try:
@@ -216,62 +208,85 @@ class ColorDotsApp:
         """Load image from URL with error handling"""
         try:
             headers = {
-                'User-Agent': 'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36'
+                'User-Agent': 'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36',
+                'Accept': 'image/webp,image/apng,image/*,*/*;q=0.8',
+                'Accept-Language': 'en-US,en;q=0.9',
+                'Accept-Encoding': 'gzip, deflate, br',
+                'Referer': 'https://www.google.com/'
             }
-            response = requests.get(url, timeout=timeout, headers=headers)
+
+            # Try direct URL first
+            response = requests.get(url, timeout=timeout, headers=headers, stream=True)
             response.raise_for_status()
-            img = Image.open(io.BytesIO(response.content))
+
+            # Read content
+            content = response.content
+            if not content:
+                raise ValueError("Empty response")
+
+            img = Image.open(io.BytesIO(content))
 
             # Convert to RGB if necessary
             if img.mode not in ('RGB', 'RGBA'):
                 img = img.convert('RGB')
 
             # Resize if too large (for performance)
-            max_size = 500
+            max_size = 300
             if img.width > max_size or img.height > max_size:
                 img.thumbnail((max_size, max_size), Image.Resampling.LANCZOS)
 
-            return img
+            return img, None
 
         except Exception as e:
-            # Return a placeholder image on error
-            placeholder = Image.new('RGB', (200, 200), color='#e0e0e0')
-            return placeholder
+            # Return a placeholder image with error info
+            placeholder = Image.new('RGB', (200, 200), color='#ffcccc')
+            return placeholder, str(e)
 
     def create_image_grid(self, images):
         """Create HTML grid of circular images"""
+        if not images:
+            return '<div class="image-grid"><p>No images to display</p></div>'
+
         html = '<div class="image-grid">'
 
         # Add images
         for i, img in enumerate(images[:100]):
-            # Convert to base64 for embedding
-            buffered = io.BytesIO()
+            try:
+                # Convert to base64 for embedding
+                img_str = self._img_to_base64(img)
+                html += f'<div class="circle-image"><img src="data:image/jpeg;base64,{img_str}" alt=""></div>'
+            except:
+                # Add placeholder on error
+                html += '<div class="circle-image"></div>'
 
-            # Convert to RGB if needed
-            if img.mode == 'RGBA':
-                # Create white background
-                background = Image.new('RGB', img.size, (255, 255, 255))
-                background.paste(img, mask=img.split()[3])
-                img = background
-            elif img.mode != 'RGB':
-                img = img.convert('RGB')
-
-            # Save as JPEG
-            img.save(buffered, format="JPEG", quality=85)
-            img_str = base64.b64encode(buffered.getvalue()).decode()
-
-            html += f'''
-            <div class="circle-image">
-                <img src="data:image/jpeg;base64,{img_str}" alt="Result {i + 1}">
-            </div>
-            '''
-
-        # Fill empty spots
+        # Fill remaining spots
         for i in range(len(images), 100):
             html += '<div class="circle-image"></div>'
 
         html += '</div>'
         return html
+
+    def _img_to_base64(self, img):
+        """Convert PIL image to base64 string"""
+        buffered = io.BytesIO()
+
+        # Ensure RGB mode
+        if img.mode != 'RGB':
+            img = img.convert('RGB')
+
+        # Make square by cropping center
+        width, height = img.size
+        size = min(width, height)
+        left = (width - size) // 2
+        top = (height - size) // 2
+        img = img.crop((left, top, left + size, top + size))
+
+        # Resize to reasonable size
+        img = img.resize((150, 150), Image.Resampling.LANCZOS)
+
+        # Save as JPEG
+        img.save(buffered, format="JPEG", quality=75)
+        return base64.b64encode(buffered.getvalue()).decode()
 
     def run(self):
         """Main app logic"""
@@ -329,6 +344,23 @@ class ColorDotsApp:
                 **Need more quota?**
                 Upgrade to paid tier in Google Cloud Console
                 """)
+
+            # API info
+            with st.expander("ℹ️ API Configuration"):
+                if self.API_KEY and self.SEARCH_ENGINE_ID:
+                    st.success("✅ API credentials configured")
+                    st.caption(f"Search Engine ID: {self.SEARCH_ENGINE_ID}")
+                else:
+                    st.error("❌ API credentials not found")
+
+                st.info("""
+                **Google Custom Search API Limits:**
+                - Free: 100 queries/day
+                - Each search uses ~10 API calls for 100 images
+
+                **Need more quota?**
+                Upgrade to paid tier in Google Cloud Console
+                """)
         # Main area
         if search_clicked and search_query:
             # Check if API credentials are configured
@@ -357,18 +389,45 @@ class ColorDotsApp:
                                     unsafe_allow_html=True)
 
                     images = []
-                    failed_count = 0
+                    failed_images = []
+                    loaded_count = 0
+
+                    # Debug info
+                    with st.expander("🔍 Debug Info", expanded=False):
+                        debug_container = st.container()
 
                     for i, item in enumerate(image_items):
-                        # Get the image URL
+                        # Get the image URL and metadata
                         image_url = item.get("link")
+                        title = item.get("title", "No title")
 
-                        if image_url:
-                            # Load the image
-                            img = self.load_image_from_url(image_url)
+                        # Try to get thumbnail first (more reliable)
+                        thumbnail_url = None
+                        if "image" in item:
+                            thumbnail_url = item["image"].get("thumbnailLink")
+
+                        # Prefer thumbnail over full image
+                        url_to_use = thumbnail_url if thumbnail_url else image_url
+
+                        if url_to_use:
+                            img, error = self.load_image_from_url(url_to_use)
+
+                            if error and image_url and image_url != url_to_use:
+                                # Try the full image if thumbnail failed
+                                img, error = self.load_image_from_url(image_url)
+
                             images.append(img)
+                            if error:
+                                failed_images.append(f"{title}: {error}")
+                                with debug_container:
+                                    st.caption(f"⚠️ Image {i + 1} had issues: {error[:100]}")
+                            else:
+                                loaded_count += 1
                         else:
-                            failed_count += 1
+                            # No URL provided
+                            placeholder = Image.new('RGB', (200, 200), color='#cccccc')
+                            images.append(placeholder)
+                            failed_images.append(f"{title}: No URL provided")
 
                         # Update progress
                         self.progress.progress((i + 1) / len(image_items))
@@ -380,10 +439,17 @@ class ColorDotsApp:
                     status.empty()
 
                     # Show results
-                    success_msg = f"✅ Found {len(images)} images for '{search_query}'"
-                    if failed_count > 0:
-                        success_msg += f" ({failed_count} failed to load)"
-                    st.success(success_msg)
+                    if loaded_count > 0:
+                        success_msg = f"✅ Successfully loaded {loaded_count}/{len(image_items)} images for '{search_query}'"
+                        st.success(success_msg)
+
+                        if failed_images:
+                            with st.expander(f"⚠️ {len(failed_images)} images failed to load"):
+                                for fail_msg in failed_images[:10]:  # Show first 10
+                                    st.caption(fail_msg)
+                    else:
+                        st.error(
+                            "Failed to load any images. This might be due to CORS restrictions or invalid image URLs.")
 
                 else:
                     st.warning("No images found. Try a different search term.")
@@ -413,8 +479,104 @@ class ColorDotsApp:
         # Display results
         if st.session_state.images:
             st.markdown("---")
-            grid_html = self.create_image_grid(st.session_state.images)
-            st.markdown(grid_html, unsafe_allow_html=True)
+
+            # Add debug toggle
+            debug_mode = st.checkbox("🐛 Debug Mode (Show images in simple grid)", value=False)
+
+            if debug_mode:
+                # Simple display for debugging
+                st.write(f"Displaying {len(st.session_state.images)} images:")
+                cols = st.columns(5)
+                for idx, img in enumerate(st.session_state.images[:20]):  # Show first 20
+                    with cols[idx % 5]:
+                        st.image(img, caption=f"Image {idx + 1}", use_column_width=True)
+            else:
+                # Test if HTML rendering works
+                test_html = st.checkbox("Test HTML Rendering", value=False)
+                if test_html:
+                    # Simple test with one image
+                    if st.session_state.images:
+                        test_img = st.session_state.images[0]
+                        buffered = io.BytesIO()
+                        if test_img.mode != 'RGB':
+                            test_img = test_img.convert('RGB')
+                        test_img.save(buffered, format="JPEG", quality=80)
+                        img_str = base64.b64encode(buffered.getvalue()).decode()
+
+                        st.markdown(
+                            f'<div style="width: 200px; height: 200px; border-radius: 50%; overflow: hidden; margin: 20px;">'
+                            f'<img src="data:image/jpeg;base64,{img_str}" style="width: 100%; height: 100%; object-fit: cover;">'
+                            f'</div>',
+                            unsafe_allow_html=True
+                        )
+                        st.write("If you see a circular image above, HTML rendering works!")
+
+                # Regular grid display
+                st.write("Generating grid...")
+                grid_html = self.create_image_grid(st.session_state.images)
+
+                # Display with container for better isolation
+                grid_container = st.container()
+                with grid_container:
+                    st.markdown(grid_html, unsafe_allow_html=True)
+
+                # Simplest display method using st.image
+                if st.checkbox("Use Simplest Display (st.image in grid)", value=False):
+                    st.write("Simple grid using st.image:")
+
+                    # Create a 10x10 grid
+                    for row in range(10):
+                        cols = st.columns(10)
+                        for col in range(10):
+                            idx = row * 10 + col
+                            if idx < len(st.session_state.images):
+                                with cols[col]:
+                                    # Apply circular mask using CSS
+                                    st.markdown(
+                                        """
+                                        <style>
+                                        .stImage > img {
+                                            border-radius: 50% !important;
+                                            object-fit: cover !important;
+                                            aspect-ratio: 1 !important;
+                                        }
+                                        </style>
+                                        """,
+                                        unsafe_allow_html=True
+                                    )
+                                    st.image(st.session_state.images[idx], use_column_width=True)
+                    st.write("Alternative grid display using Streamlit columns:")
+
+                    # Create a 10x10 grid using Streamlit columns
+                    for row in range(10):
+                        cols = st.columns(10)
+                        for col in range(10):
+                            idx = row * 10 + col
+                            if idx < len(st.session_state.images):
+                                with cols[col]:
+                                    # Use custom CSS for circular display
+                                    img_base64 = self._img_to_base64(st.session_state.images[idx])
+                                    st.markdown(
+                                        f'''
+                                        <div style="
+                                            width: 100%;
+                                            aspect-ratio: 1;
+                                            border-radius: 50%;
+                                            overflow: hidden;
+                                            background-image: url('data:image/jpeg;base64,{img_base64}');
+                                            background-size: cover;
+                                            background-position: center;
+                                        "></div>
+                                        ''',
+                                        unsafe_allow_html=True
+                                    )
+                            else:
+                                with cols[col]:
+                                    # Empty placeholder
+                                    st.markdown(
+                                        '<div style="width: 100%; aspect-ratio: 1; border-radius: 50%; background-color: #f0f0f0;"></div>',
+                                        unsafe_allow_html=True
+                                    )
         else:
             # Welcome message
             st.markdown("""
