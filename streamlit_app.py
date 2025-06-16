@@ -21,7 +21,7 @@ st.markdown("""
     footer {visibility: hidden;}
     header {visibility: hidden;}
     .block-container {
-        padding-top: 1rem;
+        padding-top: 2rem;
         max-width: 100%;
     }
 
@@ -30,23 +30,24 @@ st.markdown("""
         background-color: white;
     }
 
-    /* 10x10 Grid */
+    /* Flexbox Grid */
     .grid {
-        display: grid;
-        grid-template-columns: repeat(10, 1fr);
+        display: flex;
+        flex-wrap: wrap;
         gap: 8px;
         width: 100%;
         max-width: 800px;
-        min-height: 800px;
         margin: 1px auto;
         padding: 1px;
         background: white;
         border-radius: 0px;
         border: none;
+        justify-content: center;
     }
 
     /* Circles */
     .circle {
+        width: calc(10% - 7.2px); /* 10 columns with gap */
         aspect-ratio: 1;
         border-radius: 50%;
         background: #f5f5f5;
@@ -56,6 +57,13 @@ st.markdown("""
         transition: all 0.3s ease;
         border: none;
         cursor: pointer;
+    }
+
+    /* Mobile responsive - 4 columns */
+    @media (max-width: 768px) {
+        .circle {
+            width: calc(25% - 6px); /* 4 columns with gap */
+        }
     }
 
     .circle:hover {
@@ -338,6 +346,7 @@ if st.session_state.images:
     <!DOCTYPE html>
     <html>
     <head>
+        <meta name="viewport" content="width=device-width, initial-scale=1">
         <style>
             body {{
                 margin: 0;
@@ -346,8 +355,8 @@ if st.session_state.images:
             }}
 
             .grid {{
-                display: grid;
-                grid-template-columns: repeat(10, 1fr);
+                display: flex;
+                flex-wrap: wrap;
                 gap: 8px;
                 width: 100%;
                 max-width: 800px;
@@ -356,9 +365,11 @@ if st.session_state.images:
                 background: white;
                 border-radius: 10px;
                 border: none;
+                justify-content: center;
             }}
 
             .circle {{
+                width: calc(10% - 7.2px); /* 10 columns with gap */
                 aspect-ratio: 1;
                 border-radius: 50%;
                 background: #f5f5f5;
@@ -368,6 +379,17 @@ if st.session_state.images:
                 transition: all 0.3s ease;
                 border: none;
                 cursor: pointer;
+            }}
+
+            /* Mobile responsive - 4 columns */
+            @media (max-width: 768px) {{
+                .grid {{
+                    padding: 10px;
+                }}
+
+                .circle {{
+                    width: calc(25% - 6px); /* 4 columns with gap */
+                }}
             }}
 
             .circle:hover {{
@@ -420,7 +442,7 @@ if st.session_state.images:
     """
 
     # Use components.html for proper rendering
-    components.html(html_content, height=900, scrolling=False)
+    components.html(html_content, height=1100, scrolling=False)
 
 else:
     st.markdown("""
