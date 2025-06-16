@@ -42,7 +42,7 @@ st.markdown("""
         padding: 1px;
         background: white;
         border-radius: 0px;
-        border: 1px solid #f0f0f0;
+        border: 0px solid #f0f0f0;
     }
 
     /* Circles */
