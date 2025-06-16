@@ -209,9 +209,9 @@ def get_random_color(img):
         img = img.convert('RGB')
 
     width, height = img.size
-    # Sample from center area for better colors
-    x = random.randint(width // 4, 3 * width // 4)
-    y = random.randint(height // 4, 3 * height // 4)
+    # Sample from center 60% area for better colors
+    x = random.randint(int(width * 0.2), int(width * 0.8))
+    y = random.randint(int(height * 0.2), int(height * 0.8))
 
     r, g, b = img.getpixel((x, y))
     return f"#{r:02x}{g:02x}{b:02x}"
@@ -342,6 +342,16 @@ with st.sidebar:
                     st.error("No images found")
         else:
             st.error("Please configure API credentials in .streamlit/secrets.toml")
+
+    # Add reselect colors button if images are loaded
+    if st.session_state.images:
+        st.markdown("---")
+        st.markdown("### Reselect Colors")
+        st.markdown("<small style='color: #666;'>Pick new random pixels from each image</small>",
+                    unsafe_allow_html=True)
+        if st.button("🎲 Pick New Colors", use_container_width=True):
+            # Force a refresh to re-pick colors
+            st.rerun()
 
 # Display grid
 if st.session_state.images:
