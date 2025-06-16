@@ -301,6 +301,22 @@ class ColorDotsApp:
         for i, img in enumerate(images[:100]):
             # Convert to base64 for embedding
             buffered = io.BytesIO()
+
+            # Convert image to RGB if it's in palette mode or has transparency
+            if img.mode in ('P', 'RGBA', 'LA'):
+                # Convert to RGB
+                rgb_img = Image.new('RGB', img.size, (255, 255, 255))
+                # Paste the image on white background
+                if img.mode == 'RGBA' or 'transparency' in img.info:
+                    rgb_img.paste(img, mask=img.split()[-1])  # Use alpha channel as mask
+                else:
+                    rgb_img.paste(img)
+                img = rgb_img
+            elif img.mode != 'RGB':
+                # Convert any other mode to RGB
+                img = img.convert('RGB')
+
+            # Now save as JPEG
             img.save(buffered, format="JPEG", quality=85)
             img_str = base64.b64encode(buffered.getvalue()).decode()
 
