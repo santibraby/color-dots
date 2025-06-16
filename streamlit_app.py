@@ -33,11 +33,11 @@ st.markdown("""
         width: 100%;
         max-width: 800px;
         min-height: 800px;
-        margin: 20px auto;
-        padding: 20px;
-        background: rgba(255, 255, 255, 0.05);
-        border-radius: 10px;
-        border: 1px solid rgba(255, 255, 255, 0.1);
+        margin: 1px auto;
+        padding: 1px;
+        background: rgba(255, 255, 255, 1);
+        border-radius: 0px;
+        border: 1px solid rgba(255, 255, 255, 1);
     }
 
     /* Circles */
